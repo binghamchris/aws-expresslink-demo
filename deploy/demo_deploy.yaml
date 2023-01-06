@@ -1,0 +1,62 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: IoT ExpressLink Demo
+Parameters:
+  ExpressLinkCertPem:
+    Type: String
+    Description: The PEM-formatted certificate retrieved from the AWS IoT ExpressLink device. This must be the main body of the certificate, without the "BEGIN CERTIFICATE" and "END CERTIFICATE" lines.
+  ExpressLinkThingName:
+    Type: String
+    Description: The thing name retrieved from the AWS IoT ExpressLink device
+Resources:
+  IoTPolicy:
+    Type: AWS::IoT::Policy
+    Properties:
+      PolicyName: ExpressLinkBadgePolicy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+            - iot:Connect
+          Resource:
+            - "*"
+        - Effect: Allow
+          Action:
+            - iot:Publish
+            - iot:Receive
+          Resource:
+            - !Sub "arn:${AWS::Partition}:iot:${AWS::Region}:${AWS::AccountId}:topic/*"
+        - Effect: Allow
+          Action:
+            - iot:Subscribe
+          Resource:
+            - !Sub "arn:${AWS::Partition}:iot:${AWS::Region}:${AWS::AccountId}:topicfilter/*"
+  IoTThing:
+    Type: AWS::IoT::Thing
+    Properties: 
+      ThingName: 
+        Ref: ExpressLinkThingName
+  ExpressLinkCert:
+    Type: AWS::IoT::Certificate
+    Properties: 
+      CertificatePem: 
+        Fn::Sub: |
+          -----BEGIN CERTIFICATE-----
+          ${ExpressLinkCertPem}
+          -----END CERTIFICATE-----
+      Status: ACTIVE
+      CertificateMode: SNI_ONLY
+  ThingCertAttach:
+    Type: AWS::IoT::ThingPrincipalAttachment
+    Properties: 
+      Principal: !GetAtt ExpressLinkCert.Arn
+      ThingName:
+        Ref: IoTThing
+  CertPolicyAttach:
+    Type: AWS::IoT::PolicyPrincipalAttachment
+    Properties: 
+      PolicyName:
+        Ref: IoTPolicy
+      Principal: !GetAtt ExpressLinkCert.Arn
+
+  
