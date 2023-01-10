@@ -7,7 +7,6 @@ There are four steps needed to deploy the demo:
 2. Get the certificate and device name information from the Demo Badge
 3. Deploy the CloudFormation template to your AWS account, providing the parameters retrieved in step 2
 4. Configure the AWS IoT Core endpoint on the Demo Badge
-5. Create a classic shadow for the Demo Badge
 
 ### 1. Configure the wifi connection on the Demo Badge
 Enter your wifi network's SSID and key into the variables `wifi_ssid` and `wifi_key` respectively in the file `config_wifi.py`. Afterwards this file should be treated as highly security sensitive, seeing as it now contains a security token (your wifi network's key), so please take all necessary precautions about saving or disseminating it, and most especially avoid accidentally committing it to your Git repo!
@@ -34,7 +33,3 @@ Enter your AWS account's "device data endpoint" URL into the variable `endpoint_
 Connect to your Demo Badge over the USB-C connection using a serial console, such as the [serial-terminal web app](https://googlechromelabs.github.io/serial-terminal/), then copy and paste the commands from the file `set_device_endpoint.py` into the console.
 
 The Demo Badge should immediately attempt to connect to AWS IoT Core. If the attempt is successful, the message `OK 1 CONNECTED` will be displayed in the serial console.
-
-### 5. Create a classic shadow for the Demo Badge
-In the AWS IoT console navigate to "All devices > Things" and select the thing with the device name displayed in the serial console during step two.
-Under the "Device Shadows" tab, selected "Create Shadow" and create a new "Classic (unnamed)" shadow.

@@ -4,30 +4,34 @@ import json
 from adafruit_ticks import ticks_add, ticks_less, ticks_ms
 
 badge = Badge()
-current_url=""
+current_config=0
 next_data_update = ticks_ms()
 last_reported_state = {}
 DEFAULT_UPDATE_RATE = 4000 # milliseconds
 update_rate = DEFAULT_UPDATE_RATE
+button_mapping = {}
 
-def change_url(url_to_share):
-    global current_url
-    print(f"Previous URL was: {current_url}")
+def change_url(config_index):
+    global current_config
+    global button_mapping
 
-    print(f"URL to share is: {url_to_share}")
+    if bool(button_mapping):
+        url_to_share = button_mapping[f'button_{config_index}'][0]
+        print(f"Sharing URL: {url_to_share}")
+        print("Setting NFC tag...")
+        badge.nfc_tag.set_url(button_mapping[f'button_{config_index}'][0])
+        print("Displaying QR code...")
+        badge.show_qr_code(button_mapping[f'button_{config_index}'][0])
+        print("Setting LEDs...")
 
-    print("Setting NFC tag...")
-    badge.nfc_tag.set_url(url_to_share)
+        led_tuple = (button_mapping[f'button_{config_index}'][1][0], button_mapping[f'button_{config_index}'][1][1], button_mapping[f'button_{config_index}'][1][2])
+        for l in range(0,5):
+            badge.leds[l] = led_tuple
+        badge.leds.brightness = 1.0
 
-    print("Displaying QR code...")
-    badge.show_qr_code(url_to_share)
-
-    current_url = url_to_share
-
-    print(f"Current URL is: {current_url}")
-
-    new_reported_state = report_changed_values(last_reported_state)
-    last_reported_state.update(new_reported_state)
+        current_config = config_index
+        new_reported_state = report_changed_values(last_reported_state)
+        last_reported_state.update(new_reported_state)
 
 
 def handle_shadow_doc(line):
@@ -57,14 +61,26 @@ def handle_desired_shadow_state(desired_state):
     payload['state']['desired'] = {}
     payload['state']['reported'] = {}
 
+    global current_config
+
     # Iterate over all desired state keys and update the Demo Badge components accordingly
     for k, v in desired_state.items():
         payload['state']['desired'][k] = None
         payload['state']['reported'][k] = v
         if k == 'display_brightness':
             badge.display.brightness = float(v) / 100
-        elif k == 'shared_url':
-            change_url(v)
+        elif k == 'buttons_config':
+            global button_mapping
+            for z in v:
+                button_mapping[z] = v[z]
+            if current_config > 0 and current_config < 4:
+                change_url(current_config)
+        elif k == 'active_button_config':
+            if v > 0 and v < 4:
+                current_config = v
+                change_url(v)
+            else:
+                print(f"{v} is not a valid button number")
         elif k == 'led_brightness':
             badge.leds.brightness = float(v) / 100
         elif k == 'led_animation':
@@ -131,7 +147,8 @@ def report_changed_values(last_reported_state):
     conditional_report('led_3', t2rgb(badge.leds[2]))
     conditional_report('led_4', t2rgb(badge.leds[3]))
     conditional_report('led_5', t2rgb(badge.leds[4]))
-    conditional_report('shared_url', current_url)
+    conditional_report('active_button_config', current_config)
+    conditional_report('buttons_config', button_mapping)
 
     # Publish shadow update
     payload = {}
@@ -148,15 +165,11 @@ if not success:
     print(f"Unable to connect: {err} {status}")
     while True: pass
 
-change_url("https://cloudypandas.ch")
-
 thing_name = badge.expresslink.config.ThingName
 badge.expresslink.config.enable_shadow = True
 badge.expresslink.shadow_init()
 badge.expresslink.shadow_doc()
 badge.expresslink.shadow_subscribe()
-
-
 
 while True:
     badge.update()
@@ -190,9 +203,9 @@ while True:
         next_data_update = ticks_add(ticks_ms(), update_rate)
 
     if badge.button1.pressed:
-        change_url("https://cloudypandas.ch")
+        change_url(1)
     if badge.button2.pressed:
-        change_url("https://www.cloudreach.com/en/technical-blog/")
+        change_url(2)
     if badge.button3.pressed:
-        change_url("https://github.com/binghamchris")
+        change_url(3)
     
