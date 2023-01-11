@@ -26,6 +26,6 @@ def lambda_handler(event, context):
     )
   except Exception as e:
     logger.error("{}".format(e))
-    return {"status": "query error", "message": "{}".format(e)} 
+    return("An error occurred, try again later") 
 
   return(json.loads(shadow['payload'].read())['state']['reported'])
