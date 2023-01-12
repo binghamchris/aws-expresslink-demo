@@ -171,6 +171,8 @@ badge.expresslink.shadow_init()
 badge.expresslink.shadow_doc()
 badge.expresslink.shadow_subscribe()
 
+
+print("Looping...")
 while True:
     badge.update()
 
@@ -195,6 +197,9 @@ while True:
         else:
             print(f"Ignoring event: {event_id} {parameter} {mnemonic} {detail}")
 
+        if (current_config == 0):
+            change_url(1)
+    
     if ticks_less(next_data_update, ticks_ms()):
         new_reported_state = report_changed_values(last_reported_state)
         last_reported_state.update(new_reported_state)
