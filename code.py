@@ -18,8 +18,8 @@ def change_url(config_index):
     if bool(button_mapping):
         url_to_share = button_mapping[f'button_{config_index}'][0]
         print(f"Sharing URL: {url_to_share}")
-        print("Setting NFC tag...")
-        badge.nfc_tag.set_url(button_mapping[f'button_{config_index}'][0])
+        #print("Setting NFC tag...")
+        #badge.nfc_tag.set_url(button_mapping[f'button_{config_index}'][0])
         print("Displaying QR code...")
         badge.show_qr_code(button_mapping[f'button_{config_index}'][0])
         print("Setting LEDs...")
@@ -73,11 +73,8 @@ def handle_desired_shadow_state(desired_state):
             global button_mapping
             for z in v:
                 button_mapping[z] = v[z]
-            if current_config > 0 and current_config < 4:
-                change_url(current_config)
         elif k == 'active_button_config':
             if v > 0 and v < 4:
-                current_config = v
                 change_url(v)
             else:
                 print(f"{v} is not a valid button number")
@@ -176,6 +173,15 @@ print("Looping...")
 while True:
     badge.update()
 
+    if current_config == 0:
+        change_url(1)
+    if badge.button1.pressed:
+        change_url(1)
+    if badge.button2.pressed:
+        change_url(2)
+    if badge.button3.pressed:
+        change_url(3)
+
     while badge.expresslink.event_signal.value:
         badge.update()
 
@@ -196,9 +202,6 @@ while True:
             # shadow update accepted, no further processing needed
         else:
             print(f"Ignoring event: {event_id} {parameter} {mnemonic} {detail}")
-
-        if (current_config == 0):
-            change_url(1)
     
     if ticks_less(next_data_update, ticks_ms()):
         new_reported_state = report_changed_values(last_reported_state)
@@ -206,11 +209,3 @@ while True:
 
         # set the next data update timestamp
         next_data_update = ticks_add(ticks_ms(), update_rate)
-
-    if badge.button1.pressed:
-        change_url(1)
-    if badge.button2.pressed:
-        change_url(2)
-    if badge.button3.pressed:
-        change_url(3)
-    
