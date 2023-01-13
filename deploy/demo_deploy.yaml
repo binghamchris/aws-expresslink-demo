@@ -3,15 +3,15 @@ Description: IoT ExpressLink Demo
 Parameters:
   ExpressLinkCertPem:
     Type: String
-    Description: The PEM-formatted certificate retrieved from the AWS IoT ExpressLink device. This must be the main body of the certificate, without the "BEGIN CERTIFICATE" and "END CERTIFICATE" lines.
+    Description: The PEM-formatted certificate retrieved from the AWS IoT ExpressLink demo badge. This must be the main body of the certificate, without the "BEGIN CERTIFICATE" and "END CERTIFICATE" lines.
   ExpressLinkThingName:
     Type: String
-    Description: The thing name retrieved from the AWS IoT ExpressLink device
+    Description: The thing name retrieved from the AWS IoT ExpressLink demo badge
 Resources:
   IoTPolicy:
     Type: AWS::IoT::Policy
     Properties:
-      PolicyName: ExpressLinkBadgePolicy
+      PolicyName: DemoBadgePolicy
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -58,5 +58,220 @@ Resources:
       PolicyName:
         Ref: IoTPolicy
       Principal: !GetAtt ExpressLinkCert.Arn
+  GetShadowRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies: 
+        - PolicyName: GetShadowPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+                - iot:GetThingShadow
+              Resource:
+                - !Sub "arn:${AWS::Partition}:iot:${AWS::Region}:${AWS::AccountId}:thing/${IoTThing}"
+            - Effect: Allow
+              Action:
+                - iot:DescribeEndpoint
+              Resource:
+                - "*"
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+              Resource:
+                - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*"
+            - Effect: Allow
+              Action:
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource:
+                - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/getShadow:*"
+      RoleName: GetShadowRole  
+  GetShadowFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Architectures: 
+        - arm64
+      Runtime: python3.9
+      Handler: index.lambda_handler
+      Code: 
+        ZipFile: |
+          import boto3
+          import json
+          import logging
+          import os
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          THING_NAME = os.environ.get("THING_NAME", "")
+
+          def lambda_handler(event, context):
+            logger.debug("event:\n{}".format(json.dumps(event, indent=2)))
+
+            try:
+              client = boto3.client('iot')
+              response = client.describe_endpoint(endpointType="iot:Data-ats")
+              iot_endpoint = f"https://{response['endpointAddress']}"
+
+              client = boto3.client(
+                'iot-data', 
+                endpoint_url=iot_endpoint
+              )
+
+              shadow = client.get_thing_shadow(
+                  thingName=THING_NAME
+              )
+            except Exception as e:
+              logger.error("{}".format(e))
+              return("An error occurred, try again later") 
+
+            return(json.loads(shadow['payload'].read())['state']['reported'])
+      Environment: 
+        Variables: 
+          THING_NAME: !Ref IoTThing
+      FunctionName: getShadow
+      Role: !GetAtt GetShadowRole.Arn
+  GetShadowFunctionUrlPermission:
+     Type: AWS::Lambda::Permission
+     Properties:
+       FunctionName: !Ref GetShadowFunction
+       FunctionUrlAuthType: 'NONE'
+       Action: lambda:InvokeFunctionUrl
+       Principal: '*'
+  GetShadowFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties: 
+      AuthType: NONE
+      Cors: 
+        AllowCredentials: false
+        AllowOrigins: 
+          - "*"
+      TargetFunctionArn: !GetAtt GetShadowFunction.Arn
+  UpdateShadowRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies: 
+        - PolicyName: UpdateShadowPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+                - iot:UpdateThingShadow
+              Resource:
+                - !Sub "arn:${AWS::Partition}:iot:${AWS::Region}:${AWS::AccountId}:thing/${IoTThing}"
+            - Effect: Allow
+              Action:
+                - iot:DescribeEndpoint
+              Resource:
+                - "*"
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+              Resource:
+                - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*"
+            - Effect: Allow
+              Action:
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource:
+                - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/updateShadow:*"
+      RoleName: UpdateShadowRole  
+  UpdateShadowFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Architectures: 
+        - arm64
+      Runtime: python3.9
+      Handler: index.lambda_handler
+      Code: 
+        ZipFile: |
+          import boto3
+          import json
+          import logging
+          import os
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          THING_NAME = os.environ.get("THING_NAME", "")
+
+          def lambda_handler(event, context):
+            logger.info("event:\n{}".format(json.dumps(event, indent=2)))
+
+            try:
+              client = boto3.client('iot')
+              response = client.describe_endpoint(endpointType="iot:Data-ats")
+              iot_endpoint = f"https://{response['endpointAddress']}"
+
+              client = boto3.client(
+                'iot-data', 
+                endpoint_url=iot_endpoint
+              )
+              
+              if event['body']:
+                request = json.loads(event['body'])
+              
+              if request['active_button_config'] and request['active_button_config'] > 0 < 4:
+                desired_state = {
+                  "state": {
+                    "desired": {
+                      "active_button_config": request['active_button_config']
+                    }
+                  }
+                }
+                shadow = client.update_thing_shadow(
+                  thingName=THING_NAME,
+                  payload=json.dumps(desired_state, indent=2).encode('utf-8')
+                )
+
+                return({"update_status":"success"})
+            
+            except Exception as e:
+              logger.error("{}".format(e))
+              return({"update_status":"failed"}) 
+
+            return({"update_status":"failed"})
+      Environment: 
+        Variables: 
+          THING_NAME: !Ref IoTThing
+      FunctionName: updateShadow
+      Role: !GetAtt UpdateShadowRole.Arn
+  UpdateShadowFunctionUrlPermission:
+     Type: AWS::Lambda::Permission
+     Properties:
+       FunctionName: !Ref UpdateShadowFunction
+       FunctionUrlAuthType: 'NONE'
+       Action: lambda:InvokeFunctionUrl
+       Principal: '*'
+  UpdateShadowFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties: 
+      AuthType: NONE
+      Cors: 
+        AllowCredentials: false
+        AllowOrigins: 
+          - "*"
+      TargetFunctionArn: !GetAtt UpdateShadowFunction.Arn
 
   
