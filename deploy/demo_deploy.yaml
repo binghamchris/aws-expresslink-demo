@@ -7,6 +7,21 @@ Parameters:
   ExpressLinkThingName:
     Type: String
     Description: The thing name retrieved from the AWS IoT ExpressLink demo badge
+  GithubRepoUrl:
+    Type: String
+    Description: The URL of the GitHub repo containing the demo web app.
+    Default: https://github.com/binghamchris/aws-expresslink-demo-webapp
+  GithubBranchName:
+    Type: String
+    Description: The name of branch in the GitHub repo to be used for deployment
+    Default: main
+  GithubToken:
+    Type: String
+    Description: The GitHub classic personal access token to be used during the setup of the Amplify app. Please see this page for details - https://docs.aws.amazon.com/amplify/latest/userguide/setting-up-GitHub-access.html#setting-up-github-app-cloudformation
+  DemoWebAppDomainFqdn:
+    Type: String
+    Description: The domain the app should be served on. "demo." will be added to the beginning of this domain. If DNS dor the domain is *not* hosted by Route 53 in the same AWS account as this deployment, please see the AWS Amplify console after deployment to verify the domain and make the web app available
+    AllowedPattern: ^(((?!-)[A-Za-z0-9-]{0,62}[A-Za-z0-9])\.)+((?!-)[A-Za-z0-9-]{1,62}[A-Za-z0-9])(\.)?$
 Resources:
   IoTPolicy:
     Type: AWS::IoT::Policy
@@ -34,13 +49,12 @@ Resources:
   IoTThing:
     Type: AWS::IoT::Thing
     Properties: 
-      ThingName: 
-        Ref: ExpressLinkThingName
+      ThingName: !Ref ExpressLinkThingName
   ExpressLinkCert:
     Type: AWS::IoT::Certificate
     Properties: 
       CertificatePem: 
-        Fn::Sub: |
+        !Sub |
           -----BEGIN CERTIFICATE-----
           ${ExpressLinkCertPem}
           -----END CERTIFICATE-----
@@ -50,13 +64,11 @@ Resources:
     Type: AWS::IoT::ThingPrincipalAttachment
     Properties: 
       Principal: !GetAtt ExpressLinkCert.Arn
-      ThingName:
-        Ref: IoTThing
+      ThingName: !Ref IoTThing
   CertPolicyAttach:
     Type: AWS::IoT::PolicyPrincipalAttachment
     Properties: 
-      PolicyName:
-        Ref: IoTPolicy
+      PolicyName: !Ref IoTPolicy
       Principal: !GetAtt ExpressLinkCert.Arn
   GetShadowRole:
     Type: AWS::IAM::Role
@@ -273,5 +285,71 @@ Resources:
         AllowOrigins: 
           - "*"
       TargetFunctionArn: !GetAtt UpdateShadowFunction.Arn
+  DemoWebApp:
+    Type: AWS::Amplify::App
+    Properties:
+      Name: AWS IoT Device Shadow Demo
+      AccessToken: !Ref GithubToken
+      CustomHeaders: !Sub |
+        customHeaders:
+          - pattern: '*'
+            headers:
+              - key: X-Frame-Options
+                value: DENY
+              - key: X-XSS-Protection
+                value: 1; mode=block
+              - key: X-Content-Type-Options
+                value: nosniff
+              - key: Referrer-Policy
+                value: strict-origin-when-cross-origin
+              - key: Strict-Transport-Security
+                value: 'max-age=31536000; includeSubDomains'
+              - key: Content-Security-Policy
+                value: >-
+                  default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline';
+                  script-src 'self' 'unsafe-inline'; font-src 'self' data:;
+                  connect-src ${UpdateShadowFunctionUrl.FunctionUrl} ${GetShadowFunctionUrl.FunctionUrl} 'self'
+              - key: Permissions-Policy
+                value: >-
+                  accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(),
+                  camera=(), cross-origin-isolated=(), display-capture=(),
+                  document-domain=(), encrypted-media=(),
+                  execution-while-not-rendered=(), execution-while-out-of-viewport=(),
+                  fullscreen=(self), geolocation=(), gyroscope=(), magnetometer=(),
+                  microphone=(), midi=(), navigation-override=(), payment=(),
+                  picture-in-picture=(), publickey-credentials-get=(),
+                  screen-wake-lock=(), sync-xhr=(), usb=(), web-share=(),
+                  xr-spatial-tracking=(), clipboard-read=(), clipboard-write=(),
+                  gamepad=(), speaker-selection=(), conversion-measurement=(),
+                  focus-without-user-activation=(), hid=(), idle-detection=(),
+                  serial=(), sync-script=(), trust-token-redemption=(),
+                  vertical-scroll=(self)
+      EnableBranchAutoDeletion: False
+      EnvironmentVariables: 
+        - Name: GATSBY_GET_SHADOW_ENDPOINT
+          Value: !GetAtt GetShadowFunctionUrl.FunctionUrl
+        - Name: GATSBY_UPDATE_SHADOW_ENDPOINT
+          Value: !GetAtt UpdateShadowFunctionUrl.FunctionUrl
+        - Name: _CUSTOM_IMAGE
+          Value: public.ecr.aws/docker/library/node:18.12.1
+      Repository: !Ref GithubRepoUrl
+  DemoWebAppBranch:
+    Type: AWS::Amplify::Branch
+    Properties: 
+      AppId: !GetAtt DemoWebApp.AppId
+      BranchName: !Ref GithubBranchName
+      EnableAutoBuild: True
+      EnablePerformanceMode: False
+      EnablePullRequestPreview: True
+      Stage: EXPERIMENTAL
+  DemoWebAppDomain:
+    Type: AWS::Amplify::Domain
+    Properties: 
+      AppId: !GetAtt DemoWebApp.AppId
+      DomainName: !Ref DemoWebAppDomainFqdn
+      EnableAutoSubDomain: False
+      SubDomainSettings:
+        - BranchName: !GetAtt DemoWebAppBranch.BranchName
+          Prefix: demo
 
   
