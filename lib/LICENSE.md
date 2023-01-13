@@ -1,0 +1,1 @@
+Please contact Amazon Web Services for license information pertaining to the contents of this directory.
